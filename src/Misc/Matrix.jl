@@ -710,41 +710,7 @@ function kernel(M::MatrixElem, R::Ring; side::Symbol = :right)
   return kernel(MP, side = side)
 end
 
-################################################################################
-#
-#  Diagonal (block) matrix creation
-#
-################################################################################
 
-@doc Markdown.doc"""
-    diagonal_matrix(x::Vector{T}) where T <: RingElem -> MatElem{T}
-
-Returns a diagonal matrix whose diagonal entries are the element of $x$.
-"""
-function diagonal_matrix(x::Vector{T}) where T <: RingElem
-  M = zero_matrix(parent(x[1]), length(x), length(x))
-  for i = 1:length(x)
-    M[i, i] = x[i]
-  end
-  return M
-end
-
-function diagonal_matrix(x::T...) where T <: RingElem
-  return diagonal_matrix(collect(x))
-end
-
-@doc Markdown.doc"""
-    diagonal_matrix(x::Vector{T}) where T <: MatElem -> MatElem
-
-Returns a block diagonal matrix whose diagonal blocks are the matrices in $x$.
-"""
-function diagonal_matrix(x::Vector{T}) where T <: MatElem
-  return cat(x..., dims = (1, 2))
-end
-
-function diagonal_matrix(x::T...) where T <: MatElem
-  return cat(x..., dims = (1, 2))
-end
 ################################################################################
 #
 #  Copy matrix into another matrix
@@ -911,162 +877,6 @@ function mod_sym(M::fmpz_mat, B::fmpz)
   return N
 end
 mod_sym(M::fmpz_mat, B::Integer) = mod_sym(M, fmpz(B))
-################################################################################
-#
-#  Concatenation of matrices
-#
-################################################################################
-
-@doc Markdown.doc"""
-    vcat(A::Array{Generic.Mat, 1}) -> Generic.Mat
-    vcat(A::Array{fmpz_mat}, 1}) -> fmpz_mat
-Forms a big matrix my vertically concatenating the matrices in $A$.
-All component matrices need to have the same number of columns.
-"""
-function vcat(A::Array{T, 1})  where {S <: RingElem, T <: MatElem{S}}
-  if any(x->ncols(x) != ncols(A[1]), A)
-    error("Matrices must have same number of columns")
-  end
-  M = zero_matrix(base_ring(A[1]), sum(nrows, A), ncols(A[1]))
-  s = 0
-  for i=A
-    for j=1:nrows(i)
-      for k=1:ncols(i)
-        M[s+j, k] = i[j,k]
-      end
-    end
-    s += nrows(i)
-  end
-  return M
-end
-
-function vcat(A::Array{fmpz_mat, 1})
-  if any(x->ncols(x) != ncols(A[1]), A)
-    error("Matrices must have same number of columns")
-  end
-  M = zero_matrix(base_ring(A[1]), sum(nrows, A), ncols(A[1]))
-  s = 0
-  for i=A
-    for j=1:nrows(i)
-      for k=1:ncols(i)
-        M[s+j, k] = i[j,k]
-      end
-    end
-    s += nrows(i)
-  end
-  return M
-end
-
-function vcat(A::Array{nmod_mat, 1})
-  if any(x->ncols(x) != ncols(A[1]), A)
-    error("Matrices must have same number of columns")
-  end
-  M = zero_matrix(base_ring(A[1]), sum(nrows, A), ncols(A[1]))
-  s = 0
-  for i=A
-    for j=1:nrows(i)
-      for k=1:ncols(i)
-        M[s+j, k] = i[j,k]
-      end
-    end
-    s += nrows(i)
-  end
-  return M
-end
-
-function Base.vcat(A::MatElem...)
-  r = nrows(A[1])
-  c = ncols(A[1])
-  R = base_ring(A[1])
-  for i=2:length(A)
-    @assert ncols(A[i]) == c
-    @assert base_ring(A[i]) == R
-    r += nrows(A[i])
-  end
-  X = zero_matrix(R, r, c)
-  o = 1
-  for i=1:length(A)
-    for j=1:nrows(A[i])
-      X[o, :] = A[i][j, :]
-      o += 1
-    end
-  end
-  return X
-end
-
-function Base.hcat(A::Array{T, 1}) where {S <: RingElem, T <: MatElem{S}}
-  if any(x->nrows(x) != nrows(A[1]), A)
-    error("Matrices must have same number of rows")
-  end
-  M = zero_matrix(base_ring(A[1]), nrows(A[1]), sum(ncols, A))
-  s = 0
-  for i = A
-    for j=1:ncols(i)
-      for k=1:nrows(i)
-        M[k, s + j] = i[k,j]
-      end
-    end
-    s += ncols(i)
-  end
-  return M
-end
-
-function Base.hcat(A::MatElem...)
-  r = nrows(A[1])
-  c = ncols(A[1])
-  R = base_ring(A[1])
-  for i=2:length(A)
-    @assert nrows(A[i]) == r
-    @assert base_ring(A[i]) == R
-    c += ncols(A[i])
-  end
-  X = zero_matrix(R, r, c)
-  o = 1
-  for i=1:length(A)
-    for j=1:ncols(A[i])
-      X[:, o] = A[i][:, j]
-      o += 1
-    end
-  end
-  return X
-end
-
-
-function Base.cat(A::MatElem...;dims) 
-  @assert dims == (1,2) || isa(dims, Int)
-
-  if isa(dims, Int) 
-    if dims == 1
-      return hcat(A...)
-    elseif dims == 2
-      return vcat(A...)
-    else
-      error("dims must be 1, 2, or (1,2)")
-    end
-  end
-
-  local X
-  for i=1:length(A)
-    if i==1
-      X = hcat(A[1], zero_matrix(base_ring(A[1]), nrows(A[1]), sum(Int[ncols(A[j]) for j=2:length(A)])))
-    else
-      X = vcat(X, hcat(zero_matrix(base_ring(A[1]), nrows(A[i]), sum(ncols(A[j]) for j=1:i-1)), A[i], zero_matrix(base_ring(A[1]), nrows(A[i]), sum(Int[ncols(A[j]) for j=i+1:length(A)]))))
-    end
-  end
-  return X
-end
-
-function Base.hvcat(rows::Tuple{Vararg{Int}}, A::MatElem...)
-  B = hcat([A[i] for i=1:rows[1]]...)
-  o = rows[1]
-  for j=2:length(rows)
-    C = hcat([A[i+o] for i=1:rows[j]]...)
-    o += rows[j]
-    B = vcat(B, C)
-  end
-  return B
-end
-
 ################################################################################
 #
 #  Smith normal form with trafo
@@ -1811,13 +1621,13 @@ end
 
 function minpoly(M::MatElem)
   k = base_ring(M)
-  kx, x = PolynomialRing(k, cached = false)
+  kx, x = PolynomialRing(k, "x", cached = false)
   return minpoly(kx, M)
 end
 
 function charpoly(M::MatElem)
   k = base_ring(M)
-  kx, x = PolynomialRing(k, cached = false)
+  kx, x = PolynomialRing(k, "x", cached = false)
   return charpoly(kx, M)
 end
 
